@@ -1,0 +1,55 @@
+name: Build KernelSU kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+
+      - name: Checkout kernel
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
+            python3 zip curl git make lld llvm clang
+
+      - name: Get toolchain
+        run: |
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang $HOME/clang
+
+      - name: Add KernelSU-Next
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+
+      - name: Build
+        run: |
+          export PATH=$HOME/clang/bin:$PATH
+          export ARCH=arm64 SUBARCH=arm64
+          make O=out sdm845-perf_defconfig enchilada.config \
+            CC=clang LLVM=1 LLVM_IAS=1
+          scripts/config --file out/.config -e KSU -e KPROBES -e HAVE_KPROBES -e KPROBE_EVENTS
+          make O=out olddefconfig CC=clang LLVM=1
+          make O=out -j$(nproc) CC=clang LLVM=1 LLVM_IAS=1 2>&1 | tee build.log
+
+      - name: Package
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
+          cp out/arch/arm64/boot/Image.gz-dtb ak3/ || cp out/arch/arm64/boot/Image.gz ak3/
+          cd ak3 && zip -r9 ../KSU-fajita.zip . -x '.git*'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kernel-out
+          path: |
+            KSU-fajita.zip
+            build.log
