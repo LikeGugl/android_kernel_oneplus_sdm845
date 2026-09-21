@@ -20,11 +20,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison flex libssl-dev libelf-dev \
-            python3 zip curl git make lld llvm clang
-
-      - name: Get toolchain
-        run: |
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang $HOME/clang
+            python3 zip curl git make lld llvm clang \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Add KernelSU-Next
         run: |
@@ -32,13 +29,12 @@ jobs:
 
       - name: Build
         run: |
-          export PATH=$HOME/clang/bin:$PATH
           export ARCH=arm64 SUBARCH=arm64
-          make O=out sdm845-perf_defconfig enchilada.config \
-            CC=clang LLVM=1 LLVM_IAS=1
+          MK="make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
+          $MK sdm845-perf_defconfig enchilada.config
           scripts/config --file out/.config -e KSU -e KPROBES -e HAVE_KPROBES -e KPROBE_EVENTS
-          make O=out olddefconfig CC=clang LLVM=1
-          make O=out -j$(nproc) CC=clang LLVM=1 LLVM_IAS=1 2>&1 | tee build.log
+          $MK olddefconfig
+          $MK -j$(nproc) 2>&1 | tee build.log
 
       - name: Package
         run: |
